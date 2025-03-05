@@ -13,6 +13,13 @@ setup(
         "pandas",
         "PyYAML",
         "pydantic",
+        "haversine",
+        "tqdm",
+        "matplotlib",
+        "dask",
+        "distributed",
+        "netcdf4",
+        "scipy",
     ],
     package_data={
         "velox_tools": ["notebooks/*.ipynb"],  # Include notebooks
