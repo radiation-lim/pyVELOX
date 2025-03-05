@@ -1,0 +1,3 @@
+# config.yaml
+xr_HALO: "/projekt_agmwend/home_rad/Joshua/HALO-AC3_unified_data/unified_gps_new.nc"
+velox_data: "path/to/your/velox_data.nc"

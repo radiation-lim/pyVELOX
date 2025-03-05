@@ -1,0 +1,18 @@
+Metadata-Version: 2.2
+Name: velox_tools
+Version: 0.1.2
+Summary: A package for processing thermal imagery data from VELOX
+Author: Your Name
+Author-email: your.email@example.com
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Dist: numpy
+Requires-Dist: xarray
+Requires-Dist: pandas
+Requires-Dist: PyYAML
+Requires-Dist: pydantic
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: requires-dist
+Dynamic: summary
