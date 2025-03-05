@@ -19,13 +19,8 @@ def pixel_to_meter(pitch, roll, height, alpha=35.5, beta=28.7):
     return xlen, ylen
 
 def concat(dataset_array, slicing_position, pixel_per_second, quality_flag=None):
-<<<<<<< HEAD
-    """Concatenate data slices from a pushbroom sensor."""
-=======
-<<<<<<< HEAD
     """Perform a pseudo-pushbroom operation on a dataset array. In dependence of the airplane speed, the array is
     sliced and concatenated to form a pushbroom image, where each push corresponds to a second of data."""
->>>>>>> 3dfca61 (Refactors concat function for pushbroom processing)
     arrays_to_concat = []
     for i in range(len(dataset_array)):
         concating_array = dataset_array[i, :, slicing_position:slicing_position + pixel_per_second[i]]
@@ -35,7 +30,7 @@ def concat(dataset_array, slicing_position, pixel_per_second, quality_flag=None)
     return np.concatenate(arrays_to_concat, axis=1)
 
 @timing_wrapper
-def concatenate_images3(dataset, slicing_position=250, time_slice=None, channel=0, variable='BT_2D', quality_flag=None, mode='numpy'):
+def pushbroom(dataset, slicing_position=250, quality_flag=None):
     """Process a dataset and create a pushbroom image."""
     dataset_time = dataset.time
     # Load external dataset using the configured path if needed.
