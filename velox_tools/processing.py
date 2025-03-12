@@ -181,13 +181,14 @@ def concat(dataset_array, slicing_position, pixel_per_second, quality_flag=None)
 
 
 @timing_wrapper
-def pushbroom(dataset, slicing_position=250, quality_flag=None):
+def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=xrHALO):
     """Process a dataset and create a pushbroom image."""
     dataset_time = dataset.time
     # Load external dataset using the configured path if needed.
     # In a complete package, you might call config.load_config() to get the xr_HALO location.
-    xrHALO = xr.open_dataset('/projekt_agmwend/home_rad/Joshua/HALO-AC3_unified_data/unified_gps_new.nc') \
-               .sortby('time').sel(time=dataset_time).interp_like(dataset_time)
+    # xrHALO = xr.open_dataset('/projekt_agmwend/home_rad/Joshua/HALO-AC3_unified_data/unified_gps_new.nc') \
+    #            .sortby('time').sel(time=dataset_time).interp_like(dataset_time)
+    xrHALO = nav_data.sel(time=dataset_time).interp_like(dataset_time)
 
     pixel_size_along_track = np.round(pixel_to_meter(xrHALO['pitch'], xrHALO['roll'], xrHALO['alt'])[1] / 507)
     pixel_size_across_track = np.round(pixel_to_meter(xrHALO['pitch'], xrHALO['roll'], xrHALO['alt'])[0] / 635)
