@@ -199,6 +199,10 @@ def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=xrHALO)
     list_of_arrays = {varname: [] for varname in dataset_variables}
     im_shape = None
 
+    # filter out variables that are not 3D (x, y, time)
+
+    dataset_variables = [varname for varname in dataset_variables if 'x' in dataset[varname].dims and 'y' in dataset[varname].dims and 'time' in dataset[varname].dims]
+
     for varname in dataset_variables:
         dims = dataset[varname].dims
         if 'band' in dims:

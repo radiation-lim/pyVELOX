@@ -13,6 +13,9 @@ To install the package, clone the repository and run the following command in th
 pip install .
 ```
 
+To run the processing tools, you will need to add HALO navigation file, including the 'lat', 'lon', 'alt', 'pitch', 'roll', and 'heading' data variables.
+Add this file as `HALO_nav.nc` in the `data` directory. 
+
 ## Usage
 
 For usage examples, find the jupyter notebooks in the `notebooks` directory:
