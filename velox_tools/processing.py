@@ -5,6 +5,7 @@ import xarray as xr
 import pandas as pd
 import time
 from velox_tools.utils import timing_wrapper
+from velox_tools.config import load_config  
 from haversine import inverse_haversine, Direction, Unit
 from tqdm import tqdm
 import xarray as xr
@@ -17,7 +18,8 @@ import dask
 from dask import delayed, compute
 import gc
 
-xrHALO = xr.open_dataset('/projekt_agmwend/home_rad/Joshua/HALO-AC3_unified_data/unified_gps_new.nc').sortby('time')
+config = load_config()
+xrHALO = xr.open_dataset(config.HALO_nav).sortby('time')
 
 def pixel_to_meter(pitch, roll, height, alpha=35.5, beta=28.7):
 
@@ -49,7 +51,7 @@ def nadir_to_center_of_frame(pitch, roll, height, alpha=35.5, beta=28.7):
 
 def project(data, nav_data=xrHALO):
 
-    ds_vel = xr.open_dataset('/projekt_agmwend/data/HALO-AC3/02_Flights/HALO-AC3_20220314_HALO_RF04/VELOX/VELOX_327kveL/Processed/HALO-AC3_VELOX_BT_Filter_01_20220314_RF04_v2.0.nc')
+    ds_vel = xr.open_dataset('../data/VELOX_viewing_angles.nc')
     
     data['vaa'] = ds_vel['vaa'].isel(x=slice(0, 635), y=slice(0, 507))
     data['vza'] = ds_vel['vza'].isel(x=slice(0, 635), y=slice(0, 507))
@@ -146,8 +148,7 @@ def project(data, nav_data=xrHALO):
     #lats_lons = data.map_blocks(compute_projected_coordinates, data['offset_centers_lat'], data['offset_centers_lon'], data['vaa_corrected'], data['dists'], drop_axis=[0, 1, 2])
 
     lats_array, lons_array = lats_lons
-    # lats_array = lats_array.reshape(shape_x, shape_y)
-    # lons_array = lons_array.reshape(shape_x, shape_y)
+
 
     data['lons'] = xr.DataArray(lons_array, dims=['time', 'x', 'y'])
     data['lats'] = xr.DataArray(lats_array, dims=['time','x', 'y'])
@@ -176,6 +177,8 @@ def concat(dataset_array, slicing_position, pixel_per_second, quality_flag=None)
             concating_array = np.full_like(concating_array, np.nan)
         arrays_to_concat.append(concating_array)
     return np.concatenate(arrays_to_concat, axis=1)
+
+
 
 @timing_wrapper
 def pushbroom(dataset, slicing_position=250, quality_flag=None):
