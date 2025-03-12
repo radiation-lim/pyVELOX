@@ -19,7 +19,7 @@ from dask import delayed, compute
 import gc
 
 config = load_config()
-xrHALO = xr.open_dataset(config.HALO_nav).sortby('time')
+xrHALO = xr.open_dataset(config.nav_data).sortby('time')
 
 def pixel_to_meter(pitch, roll, height, alpha=35.5, beta=28.7):
 

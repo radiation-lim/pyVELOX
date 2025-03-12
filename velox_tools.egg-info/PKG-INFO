@@ -1,4 +1,4 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.1
 Name: velox_tools
 Version: 0.1.2
 Summary: A package for processing thermal imagery data from VELOX
@@ -19,8 +19,3 @@ Requires-Dist: dask
 Requires-Dist: distributed
 Requires-Dist: netcdf4
 Requires-Dist: scipy
-Dynamic: author
-Dynamic: author-email
-Dynamic: classifier
-Dynamic: requires-dist
-Dynamic: summary

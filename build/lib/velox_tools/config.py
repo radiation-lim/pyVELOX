@@ -5,8 +5,8 @@ import yaml
 from pydantic import BaseModel, Field
 
 class DataConfig(BaseModel):
-    xr_HALO: str = Field(default="data/xr_HALO.nc", description="Path to the xr_HALO dataset")
-    velox_data: str = Field(default="data/velox_data.nc", description="Path to the VELOX dataset")
+    HALO_nav: str = Field(default="data/HALO_nav.nc", description="Path to the HALO navigation dataset (including pitch, roll, alt, lat, lon)")
+    viewing_angles: str = Field(default="data/VELOX_viewing_angles.nc", description="Path to the VELOX viewing angles dataset")
     # add more dataset paths or configuration parameters as needed
 
 def load_config(config_file: str = "config.yaml") -> DataConfig:

@@ -1,4 +1,5 @@
 LICENSE
+README.md
 pyproject.toml
 setup.py
 velox_tools/__init__.py
@@ -11,4 +12,5 @@ velox_tools.egg-info/dependency_links.txt
 velox_tools.egg-info/requires.txt
 velox_tools.egg-info/top_level.txt
 velox_tools/notebooks/__init__.py
+velox_tools/notebooks/georeff.ipynb
 velox_tools/notebooks/pushbroom.ipynb
