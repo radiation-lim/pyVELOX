@@ -1,0 +1,50 @@
+description:
+  name: VELOX_config
+
+# Mounttree definition: instrument mount geometry relative to the aircraft.
+# Do NOT change this section without re-deriving the VELOX position offset
+# (-8.048, -0.0665, 1.6256) and the per-channel Offset-Angles below --
+# they were calibrated together. Ported as-is from PaulR's velox.yaml
+# (/projekt_agmwend/home_rad/PaulR/Velox_GeoRef_Px/velox.yaml).
+mounttree:
+  framename: EARTH
+  framespec: WGS-84
+  subframes:
+    - framename: HALO
+      position: [ lat, lon, height ]
+      rotation: [ roll, pitch, yaw ]
+      subframes:
+        - framename: VELOX
+          position: [ -8.048, -0.0665, 1.6256 ]
+          rotation: [ offset_roll, offset_pitch, offset_yaw ]
+    - framename: HeightPlane
+      position: [ ref_lat, ref_lon, ref_height ]
+      rotation: [ 0, 0, 0 ]
+
+# Per-channel boresight offset angles and View-Direction-Cosine (VDC)
+# calibration files, from the VELOX_Stereography calibration
+# (/projekt_agmwend/data/HALO-AC3/15_VELOX_Stereography/). VDC-File paths
+# below are relative to this package's velox_tools/data/georef_paulr/
+# directory (resolved at runtime), copied from the originals so this
+# module works without access to PaulR's home directory.
+#
+# PERCUSION campaign offsets exist in PaulR's original velox.yaml but are
+# not copied here (out of scope for this project) -- add a `PERCUSION:`
+# block here plus the matching VDC files if needed later.
+campaign:
+  HALO-AC3:
+    Channel1:
+      VDC-File: Velox-VDC_HALO-AC3_Channel1.nc
+      Offset-Angles: {offset_roll: 0.23, offset_pitch: -2.78, offset_yaw: 0.01}
+    Channel2:
+      VDC-File: Velox-VDC_HALO-AC3_Channel2.nc
+      Offset-Angles: {offset_roll: 0.30, offset_pitch: -2.75, offset_yaw: 0.01}
+    Channel3:
+      VDC-File: Velox-VDC_HALO-AC3_Channel3.nc
+      Offset-Angles: {offset_roll: 0.51, offset_pitch: -2.72, offset_yaw: 0.01}
+    Channel5:
+      VDC-File: Velox-VDC_HALO-AC3_Channel5.nc
+      Offset-Angles: {offset_roll: 0.29, offset_pitch: -2.95, offset_yaw: 0.01}
+    Channel6:
+      VDC-File: Velox-VDC_HALO-AC3_Channel6.nc
+      Offset-Angles: {offset_roll: 0.57, offset_pitch: -2.47, offset_yaw: 0.01}
