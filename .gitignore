@@ -172,3 +172,7 @@ cython_debug/
 .gz
 .whl
 .nc
+# Sphinx docs build output
+docs/_build/
+docs/.jupyter_cache/
+docs/apidocs/

@@ -91,3 +91,12 @@ The data is not included in this repository. You can access the data [here](http
 CAUTION: The datasets are large (~20GB) and may take a while to download.
 
 ## Processing tools for 2D thermal imagery data form the VELOX thermal infrared camera
+
+## Documentation
+
+API reference + the example notebooks above, built with Sphinx + MyST:
+
+```bash
+pip install -r docs/requirements.txt
+cd docs && python -m sphinx -b html . _build/html
+```
