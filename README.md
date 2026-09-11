@@ -13,6 +13,7 @@ Institute for Meteorology on the research aircraft HALO:
 **Documentation:** <https://radiation-lim.github.io/pyVELOX/> -- example
 notebooks and the full API reference.
 
+<!-- docs:start -->
 ## Installation
 
 ```bash
@@ -65,6 +66,7 @@ ds['BT_2D'] = apply_correction(ds['BT_2D'], ds['BT_Center'], table, band=2)
 pb = processing.pushbroom(ds, nav_data=campaign.load_nav(t))
 ```
 
+<!-- docs:end -->
 ## Examples
 
 The notebooks in [`velox_tools/notebooks`](velox_tools/notebooks) walk through
@@ -78,6 +80,7 @@ each part of the package with real data:
 | [4. Fixed-pattern correction](velox_tools/notebooks/04_fixed_pattern_correction.ipynb) | the shipped correction table, applying it, building your own |
 | [5. Geometry and utilities](velox_tools/notebooks/05_geometry_and_utilities.ipynb) | footprint, nadir pixel, viewing angles, housekeeping temperatures, dask cluster |
 
+<!-- docs:reference-start -->
 ## Package overview
 
 | Module | Purpose |
@@ -141,6 +144,7 @@ data_root: Q:/data
   1 Hz temporal resolution derived at flight altitude from VELOX during the
   HALO-(AC)³ field campaign, PANGAEA, <https://doi.org/10.1594/PANGAEA.963401>.
 
+<!-- docs:reference-end -->
 ## Development
 
 ```bash

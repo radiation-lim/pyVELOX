@@ -44,6 +44,7 @@ intersphinx_mapping = {
 # needs the campaign archive
 nb_execution_mode = 'off'
 myst_enable_extensions = ['colon_fence', 'deflist']
+myst_heading_anchors = 3  # README links to its own sections, e.g. #configuration
 
 html_theme = 'sphinx_book_theme'
 html_title = 'pyVELOX'
