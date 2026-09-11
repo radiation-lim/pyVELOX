@@ -28,9 +28,8 @@ mounttree:
 # directory (resolved at runtime), copied from the originals so this
 # module works without access to PaulR's home directory.
 #
-# PERCUSION campaign offsets exist in PaulR's original velox.yaml but are
-# not copied here (out of scope for this project) -- add a `PERCUSION:`
-# block here plus the matching VDC files if needed later.
+# PERCUSION uses the same VDC files (its 15_VELOX_Stereography/Calibration_Channel*
+# are symlinks to the HALO-AC3 ones), only the boresight offsets differ.
 campaign:
   HALO-AC3:
     Channel1:
@@ -48,3 +47,19 @@ campaign:
     Channel6:
       VDC-File: Velox-VDC_HALO-AC3_Channel6.nc
       Offset-Angles: {offset_roll: 0.57, offset_pitch: -2.47, offset_yaw: 0.01}
+  PERCUSION:
+    Channel1:
+      VDC-File: Velox-VDC_HALO-AC3_Channel1.nc
+      Offset-Angles: {offset_roll: -0.16, offset_pitch: -3.26, offset_yaw: 0.15}
+    Channel2:
+      VDC-File: Velox-VDC_HALO-AC3_Channel2.nc
+      Offset-Angles: {offset_roll: -0.09, offset_pitch: -3.23, offset_yaw: 0.16}
+    Channel3:
+      VDC-File: Velox-VDC_HALO-AC3_Channel3.nc
+      Offset-Angles: {offset_roll: 0.12, offset_pitch: -3.20, offset_yaw: 0.16}
+    Channel5:
+      VDC-File: Velox-VDC_HALO-AC3_Channel5.nc
+      Offset-Angles: {offset_roll: -0.10, offset_pitch: -3.43, offset_yaw: 0.16}
+    Channel6:
+      VDC-File: Velox-VDC_HALO-AC3_Channel6.nc
+      Offset-Angles: {offset_roll: 0.18, offset_pitch: -2.95, offset_yaw: 0.15}

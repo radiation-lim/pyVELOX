@@ -1,51 +1,56 @@
 # velox_tools/processing.py
+"""Pushbroom images and analytic georeferencing of VELOX frames.
 
+These functions work on any dataset with ``BT_2D`` (time, x, y) or
+(band, time, x, y) frames plus matching aircraft navigation data (``lat``,
+``lon``, ``alt``, ``gs``, ``hdg``, ``roll``, ``pitch``, indexed by
+``time``). Without explicit ``nav_data`` they use the BAHAMAS data of the
+research flight from the campaign archive
+(:func:`velox_tools.campaign.load_nav`).
+:mod:`velox_tools.campaign` wraps them for the campaign archive.
+"""
 import numpy as np
-import xarray as xr
 import pandas as pd
-import time
-from velox_tools.utils import timing_wrapper
-from velox_tools.config import load_config
-from haversine import inverse_haversine, Direction, Unit
+import xarray as xr
+from haversine import inverse_haversine, Unit
 from tqdm import tqdm
-import xarray as xr
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-import os
-from dask.distributed import Client, LocalCluster
-import dask
-from dask import delayed, compute
-import gc
 
-_default_nav_cache = None
+from velox_tools.config import load_config
+from velox_tools.utils import timing_wrapper
 
 
-def _default_nav_data():
-    """Lazily load and cache the default HALO nav dataset.
-
-    Not loaded at import time: HALO_nav.nc is 200MB+ and opening+sorting it
-    takes noticeable time on some filesystems, which used to happen just
-    from `import velox_tools.processing` (it was a module-level default
-    argument value, evaluated once at def time -- i.e. at import). Now only
-    paid the first time `pushbroom`/`project` are actually called without
-    an explicit `nav_data`. Path comes from `velox_tools.config.load_config`
-    (`config.yaml` if present, else a path relative to this package).
-    """
-    global _default_nav_cache
-    if _default_nav_cache is None:
-        config = load_config()
-        _default_nav_cache = xr.open_dataset(config.nav_data).sortby('time')
-    return _default_nav_cache
+def _default_nav_data(time):
+    """BAHAMAS nav data of the research flight at `time`."""
+    from velox_tools import campaign  # campaign imports this module
+    return campaign.load_nav(time)
 
 
 @timing_wrapper
 def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=None,
               invert_y=False, time_correction: bool = True):
-    """Process a dataset and create a pushbroom image.
+    """Build a pushbroom image from a sequence of VELOX frames.
+
+    From every frame, a strip of rows starting at `slicing_position` is cut
+    out whose width equals the along-track distance the aircraft covers
+    until the next frame (see :func:`compute_pixel_per_second`). The strips
+    are concatenated along the flight track.
 
     Parameters
     ----------
+    dataset : xarray.Dataset
+        Frames indexed by ``time`` with dims (time, x, y) or
+        (band, time, x, y). Every variable with at least three dims is
+        pushbroomed, all others are dropped.
+    slicing_position : int, default 250
+        First image row (y) of the strip cut out of every frame.
+    quality_flag : array-like of bool, optional
+        One flag per frame; strips of frames flagged False are set to NaN.
+    nav_data : xarray.Dataset, optional
+        Navigation data with ``pitch``, ``roll``, ``alt`` and ``gs``,
+        interpolated onto the frame times. Default: the BAHAMAS data of the
+        research flight (:func:`velox_tools.campaign.load_nav`).
+    invert_y : bool, default False
+        Unused, kept for backwards compatibility.
     time_correction : bool, default True
         When True, each output column is assigned the **ground-nadir time** —
         the moment the aircraft nadir passes over the ground point imaged by
@@ -59,16 +64,29 @@ def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=None,
         Set False to reproduce the legacy behaviour: a uniform
         ``pd.date_range`` spanning ``dataset_time[0]`` to
         ``dataset_time[-1]`` (no per-frame correction, no sort).
+
+    Returns
+    -------
+    xarray.Dataset
+        The pushbroomed variables with dims (y, time) or (band, y, time).
+        ``y`` here is the across-track pixel (the ``x`` axis of the input
+        frames), ``time`` the along-track axis. Attributes are copied from
+        `dataset`.
+
+    Notes
+    -----
+    The runtime is printed after every call.
     """
     dataset_time = dataset.time
     if nav_data is None:
-        nav_data = _default_nav_data()
-    xrHALO = nav_data.sel(time=dataset_time).interp_like(dataset_time)
+        nav_data = _default_nav_data(dataset_time.values[0])
+    # interp instead of an exact sel: PERCUSION frames are not on full seconds
+    xrHALO = nav_data.interp(time=dataset_time)
 
-    pixel_size_along_track = np.round(pixel_to_meter(xrHALO['pitch'], xrHALO['roll'], xrHALO['alt'])[1] / 507)
-    pixel_size_across_track = np.round(pixel_to_meter(xrHALO['pitch'], xrHALO['roll'], xrHALO['alt'])[0] / 635)
-    ground_speed = np.round(xrHALO['gs'])
-    pixel_per_second = np.array(np.round(ground_speed / pixel_size_along_track, 0), dtype='int32')
+    pixel_per_second = compute_pixel_per_second(xrHALO)
+
+    # only the strip that ends up in the image has to be read from disk
+    strip = slice(slicing_position, slicing_position + int(pixel_per_second.max()))
 
     dataset_variables = list(dataset.data_vars.keys())
     list_of_arrays = {varname: [] for varname in dataset_variables if len(list(dataset[varname].dims)) > 2}
@@ -84,15 +102,15 @@ def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=None,
         if 'band' in dims:
             ims = []
             for i in range(dataset['band'].size):
-                dataset_array = dataset[varname].isel(band=i).to_numpy()
-                im = concat(dataset_array, slicing_position, pixel_per_second, quality_flag)
+                dataset_array = dataset[varname].isel(band=i, y=strip).to_numpy()
+                im = concat(dataset_array, 0, pixel_per_second, quality_flag)
                 ims.append(im)
             im_shape = ims[0].shape
             dataset_tuple = (["band", "y", "time"], np.stack(ims))
         else:
-            dataset_array = dataset[varname].to_numpy()
+            dataset_array = dataset[varname].isel(y=strip).to_numpy()
 
-            im = concat(dataset_array, slicing_position, pixel_per_second, quality_flag)
+            im = concat(dataset_array, 0, pixel_per_second, quality_flag)
             im_shape = im.shape
             dataset_tuple = (["y", "time"], im)
 
@@ -129,6 +147,9 @@ def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=None,
 
     for key, value in list_of_arrays.items():
         ds_out[key] = value[0]
+
+    if 'band' in dataset.coords:
+        ds_out = ds_out.assign_coords(band=dataset['band'].values)
 
     if time_correction:
         ds_out = ds_out.sortby('time')
@@ -193,8 +214,47 @@ def _build_ground_time_axis(frame_times, pitch, roll, alt, gs,
 
 
 
+def compute_pixel_per_second(nav):
+    """Number of image rows the aircraft moves on between two frames.
+
+    Ground speed divided by the along-track pixel size (from
+    :func:`pixel_to_meter`), i.e. the strip width used by
+    :func:`pushbroom` for 1 Hz frames.
+
+    Parameters
+    ----------
+    nav : xarray.Dataset
+        Navigation data at the frame times with ``pitch``, ``roll`` (deg),
+        ``alt`` (m) and ``gs`` (m/s).
+
+    Returns
+    -------
+    numpy.ndarray of int32
+        Rows per frame.
+    """
+    pixel_size_along_track = np.round(pixel_to_meter(nav['pitch'], nav['roll'], nav['alt'])[1] / 507)
+    ground_speed = np.round(nav['gs'])
+    return np.array(np.round(ground_speed / pixel_size_along_track, 0), dtype='int32')
+
+
 def pixel_to_meter(pitch, roll, height, alpha=35.5, beta=28.7):
-    """Convert pixel measurements to meters based on vehicle attitude."""
+    """Ground footprint of a VELOX frame for a given attitude and altitude.
+
+    Parameters
+    ----------
+    pitch, roll : float or array-like
+        Aircraft attitude (deg).
+    height : float or array-like
+        Height above ground (m).
+    alpha, beta : float, default 35.5, 28.7
+        Full field of view across (x) and along (y) track (deg).
+
+    Returns
+    -------
+    xlen, ylen : float or array-like
+        Across- and along-track extent of the frame on the ground (m).
+        Divide by the number of pixels (635, 507) for the pixel size.
+    """
     pitch = np.radians(pitch)
     roll = np.radians(roll)
     alpha = np.radians(alpha)
@@ -207,14 +267,24 @@ def pixel_to_meter(pitch, roll, height, alpha=35.5, beta=28.7):
 
 
 def nadir_to_center_of_frame(pitch, roll, height, alpha=35.5, beta=28.7):
-    """Pixel index of the instantaneous nadir point in a 640x512 frame.
+    """Pixel that sees the point directly below the aircraft.
 
-    Clamps to the array bounds: large roll/pitch (steep turns, etc.) can
-    put the geometric nadir point outside the frame, in which case the
-    nearest edge pixel is returned rather than an out-of-range index. Do
-    not treat a clamped result as literally "nadir is at this pixel" --
-    check the unclamped angle against the FOV yourself if that distinction
-    matters for your use case.
+    Parameters
+    ----------
+    pitch, roll : float
+        Aircraft attitude (deg).
+    height : float
+        Height above ground (m).
+    alpha, beta : float, default 35.5, 28.7
+        Full field of view across (x) and along (y) track (deg).
+
+    Returns
+    -------
+    pixel_x, pixel_y : int
+        Pixel indices of the nadir point; (317, 253) for level flight.
+        Large roll or pitch (e.g. in turns) can put the nadir point outside
+        the frame -- the result is then clipped to the frame edge, so check
+        the attitude against the field of view if that matters.
     """
     pitch = np.radians(pitch)
     roll = -np.radians(roll)
@@ -230,14 +300,39 @@ def nadir_to_center_of_frame(pitch, roll, height, alpha=35.5, beta=28.7):
 
 
 def project(data, nav_data=None):
-    """Georeference VELOX pixels with a shared analytic pinhole/FOV model.
+    """Georeference VELOX pixels with the viewing angles of the sensor.
 
-    See `velox_tools.georef_paulr` for a second, more precise option that
-    accounts for each channel's own boresight offset angle and iterates on
-    a height plane instead of assuming flat ground at height 0.
+    Every pixel is projected from the aircraft position along its viewing
+    zenith and azimuth angle (``viewing_angles`` file, see
+    :mod:`velox_tools.config`, rotated by the heading) onto flat ground at
+    sea level, starting from the nadir point shifted for roll and pitch.
+    All channels share the same viewing angles. For per-channel
+    calibration and a height-plane intersection, use
+    :mod:`velox_tools.georef_paulr`.
+
+    Parameters
+    ----------
+    data : xarray.Dataset
+        Frames with dims (time, x, y) on the 635 x 507 grid. Modified in
+        place.
+    nav_data : xarray.Dataset, optional
+        Navigation data with ``lat``, ``lon``, ``alt``, ``gs``, ``hdg``,
+        ``roll`` and ``pitch``; the nearest time step is used for every
+        frame. Default: the BAHAMAS data of the research flight
+        (:func:`velox_tools.campaign.load_nav`).
+
+    Returns
+    -------
+    xarray.Dataset
+        `data` with ``lats``/``lons`` (time, x, y), plus the viewing
+        geometry (``vza``, ``vaa``, ``vaa_corrected``, ``dists``), the
+        navigation data per frame (``lat``, ``lon``, ``alt``, ``gs``,
+        ``heading``, ``roll``, ``pitch``), the shifted frame centres
+        (``offset_centers_lat``/``_lon``) and ``angle_flag`` (True where
+        roll and pitch are both below 5 deg).
     """
     if nav_data is None:
-        nav_data = _default_nav_data()
+        nav_data = _default_nav_data(data.time.values[0])
 
     config = load_config()
     ds_vel = xr.open_dataset(config.viewing_angles)
@@ -252,7 +347,8 @@ def project(data, nav_data=None):
 
     shape_x, shape_y = data['x'].shape[0], data['y'].shape[0]
 
-    lat, lon, alt, gs, heading, roll, pitch = nav_data.sel(time=data.time, method='nearest').to_array().values
+    nav_vars = ['lat', 'lon', 'alt', 'gs', 'hdg', 'roll', 'pitch']
+    lat, lon, alt, gs, heading, roll, pitch = nav_data[nav_vars].sel(time=data.time, method='nearest').to_array().values
     data['lat'] = xr.DataArray(lat, dims=['time'])
     data['lon'] = xr.DataArray(lon, dims=['time'])
     data['alt'] = xr.DataArray(alt, dims=['time'])
@@ -342,8 +438,26 @@ def project(data, nav_data=None):
 
 
 def concat(dataset_array, slicing_position, pixel_per_second, quality_flag=None):
-    """Perform a pseudo-pushbroom operation on a dataset array. In dependence of the airplane speed, the array is
-    sliced and concatenated to form a pushbroom image, where each push corresponds to a second of data."""
+    """Cut a strip out of every frame and concatenate the strips.
+
+    The core of :func:`pushbroom`, on plain numpy arrays.
+
+    Parameters
+    ----------
+    dataset_array : numpy.ndarray
+        Frames, shape (time, x, y).
+    slicing_position : int
+        First row (y) of the strip.
+    pixel_per_second : array-like of int
+        Strip width per frame (see :func:`compute_pixel_per_second`).
+    quality_flag : array-like of bool, optional
+        Strips of frames flagged False are set to NaN.
+
+    Returns
+    -------
+    numpy.ndarray
+        Shape (x, sum(pixel_per_second)).
+    """
     arrays_to_concat = []
     for i in range(len(dataset_array)):
         concating_array = dataset_array[i, :, slicing_position:slicing_position + pixel_per_second[i]]

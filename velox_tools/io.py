@@ -1,26 +1,28 @@
 # velox_tools/io.py
-"""Loaders for VELOX ancillary instrument data (not the BT_2D imagery
-itself -- see the processed netCDF/zarr archives for that)."""
+"""Loaders for VELOX housekeeping data.
+
+For the brightness temperatures themselves, see
+:func:`velox_tools.campaign.load_velox`.
+"""
 from __future__ import annotations
 
 import glob
+import os
 import re
 
 import pandas as pd
 import xarray as xr
 
+from velox_tools.config import load_config
+
 _DATE_RE = re.compile(r'(\d{8})')
 
 
 def _date_from_path(path: str) -> str:
-    """Pull the first 8-digit YYYYMMDD run of digits out of a file path.
+    """First YYYYMMDD date in a file path.
 
-    VELOX Additional/T3*.txt, T4.txt files carry no date of their own --
-    it has to come from the campaign flight-day directory name (e.g.
-    .../HALO-AC3_20220320_HALO_RF07/VELOX/.../Additional/T4.txt). Matching
-    by regex instead of a fixed `path.split('/')[-N]` index (as the
-    original notebooks did) is robust to the exact directory depth
-    varying between campaigns/setups.
+    The T3/T4 logs carry no date of their own; it comes from the flight
+    directory (e.g. ``.../HALO-AC3_20220320_HALO_RF07/.../Additional/T4.txt``).
     """
     m = _DATE_RE.search(path)
     if not m:
@@ -28,24 +30,33 @@ def _date_from_path(path: str) -> str:
     return m.group(1)
 
 
-def load_instrument_temperatures(
-    base_glob: str = '/projekt_agmwend/data/HALO-AC3/02_Flights/HALO-AC3_*/VELOX/VELOX_327kveL/Processed/Additional',
-) -> tuple[xr.Dataset, xr.Dataset]:
-    """Load and concatenate VELOX lens (T3) and germanium-window (T4)
-    temperature logs across all flight days matching `base_glob`.
+def load_instrument_temperatures(base_glob: str | None = None) -> tuple[xr.Dataset, xr.Dataset]:
+    """Lens (T3) and germanium-window (T4) temperatures of VELOX.
 
-    Same logic as was copy-pasted into desperate_correction.ipynb,
-    desperate_prepare_df_for_correction.ipynb, and
-    desperate_correction_application.ipynb.
+    Reads the ``T3*.txt`` and ``T4.txt`` logs of all flights matching
+    `base_glob` and concatenates them.
+
+    Parameters
+    ----------
+    base_glob : str, optional
+        Glob pattern of the directories holding the logs. Default: the
+        ``Additional`` directories of all HALO-(AC)3 flights below
+        ``data_root`` (see :mod:`velox_tools.config`).
 
     Returns
     -------
-    (T3, T4) : xr.Dataset, xr.Dataset
-        Each indexed by `time`, sorted, de-duplicated. T3 has data var
-        'T3' (lens temperature), T4 has 'T4' (germanium-window
-        temperature). Either may be an empty Dataset if no matching files
-        were found for that instrument.
+    T3, T4 : xarray.Dataset
+        Indexed by ``time`` (sorted, without duplicates), with the variable
+        ``T3`` or ``T4``. Empty if no files were found for that sensor.
+
+    Raises
+    ------
+    FileNotFoundError
+        If neither T3 nor T4 files match `base_glob`.
     """
+    if base_glob is None:
+        base_glob = os.path.join(load_config().data_root,
+                                 'HALO-AC3/02_Flights/HALO-AC3_*/VELOX/VELOX_327kveL/Processed/Additional')
     t3_files = glob.glob(f'{base_glob}/T3*.txt')
     t4_files = glob.glob(f'{base_glob}/T4.txt')
     if not t3_files and not t4_files:

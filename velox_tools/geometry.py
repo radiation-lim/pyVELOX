@@ -1,13 +1,10 @@
 # velox_tools/geometry.py
-"""Quick analytic viewing-geometry helpers.
+"""Analytic viewing geometry of an ideal pinhole camera.
 
-For calibrated per-pixel viewing angles, prefer `VELOX_viewing_angles.nc`
-(used by `processing.project`) or the per-channel VDC calibration used by
-`georef_paulr` -- both come from real optical/geometric calibration, not
-an idealized pinhole assumption. `make_vza_map` here is the quick,
-dependency-free analytic version several notebooks kept rewriting from
-scratch; use it for quick looks, not for anything where sub-pixel angular
-accuracy matters.
+For quick looks. The calibrated viewing angles
+(``VELOX_viewing_angles.nc``, used by
+:func:`velox_tools.processing.project`) and the per-channel calibration of
+:mod:`velox_tools.georef_paulr` are more accurate.
 """
 from __future__ import annotations
 
@@ -18,23 +15,24 @@ import xarray as xr
 def make_vza_map(nx: int = 640, ny: int = 512, fov_x_deg: float = 35.5, fov_y_deg: float = 28.7,
                   center_x: float | None = None, center_y: float | None = None,
                   to_degrees: bool = True) -> xr.DataArray:
-    """Analytic per-pixel view-zenith-angle map for a pinhole camera model.
+    """Viewing zenith angle of every pixel for a pinhole camera.
 
     Parameters
     ----------
-    nx, ny : int
-        Detector size in pixels (640x512 for VELOX).
-    fov_x_deg, fov_y_deg : float
-        Full field of view (VELOX: 35.5 x 28.7 deg).
+    nx, ny : int, default 640, 512
+        Detector size in pixels.
+    fov_x_deg, fov_y_deg : float, default 35.5, 28.7
+        Full field of view (deg).
     center_x, center_y : float, optional
-        Optical-axis pixel coordinates. Defaults to the array center.
-    to_degrees : bool
-        Return degrees (default) or radians.
+        Pixel coordinates of the optical axis. Default: the array centre.
+    to_degrees : bool, default True
+        Return degrees, else radians.
 
     Returns
     -------
-    xr.DataArray, dims ('x', 'y'), the view-zenith angle from the optical
-    axis at each pixel.
+    xarray.DataArray
+        ``VZA`` (x, y), the angle between each pixel's view direction and
+        the optical axis.
     """
     x = np.arange(nx)
     y = np.arange(ny)

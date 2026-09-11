@@ -169,9 +169,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
-.gz
-.whl
-.nc
+*.gz
+*.whl
+
+# local navigation data, no longer used -- nav data come from the campaign archive
+velox_tools/data/HALO_nav.nc
 # Sphinx docs build output
 docs/_build/
 docs/.jupyter_cache/

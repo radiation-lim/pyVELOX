@@ -1,5 +1,3 @@
 sphinx
-myst-parser
-sphinx-autodoc2
 myst-nb
 sphinx-book-theme

@@ -1,33 +1,32 @@
 # velox_tools/correction.py
-"""
-Fixed-pattern (systematic uncertainty) correction for VELOX BT_2D imagery.
+"""Empirical correction of the fixed-pattern noise in VELOX ``BT_2D``.
 
-Method: for each frame, remove a low-order 2D polynomial surface (this is
-what "detrend" means below) to strip out the frame's own large-scale scene
-structure (temperature gradients, MIZ crossings, cloud edges, ...). Then
-robustly combine (median) the per-frame residuals across many independent
-frames, stratified into scene-brightness-temperature bins (the pattern's
-amplitude is temperature-dependent -- worse in cold, narrowband channels).
+Channels 2, 3, 5 and 6 (and to a lesser extent 1) show a spatial pattern
+that survives the non-uniformity correction of the camera and the
+destriping of the final data. Its amplitude depends on the scene
+temperature -- it is strongest for cold scenes in the narrowband channels.
+The correction works in three steps:
 
-This was validated on 2026-08-11 by cross-checking two independently
-selected frame pools that share no methodology:
-  - an automatic clear-sky-flagged archive (halo_ac3_velox_sea_ice_clear_sky.zarr)
-  - hand/domain-expert-vetted marginal-ice-zone (MIZ) crossing timestamps
-    from Mueller et al. (2024)'s velox_timesteps_in_miz_v2.csv
-Both, once run through this same detrend+combine method, converge on the
-same spatial pattern (Pearson r=0.74 for channel 3, 2022-04-04). Plain
-time-averaging without per-frame detrending -- as used in
-Mueller et al. (2024)'s correction_fields_v1/v2.nc and in this package's
-own earlier notebooks/correct_fixed_pattern*.ipynb drafts -- lets real
-scene gradients leak into the "correction" (that comparison showed a
-spurious +-3.5K diagonal gradient with near-zero correlation to the
-detrended version) and should be avoided.
+1. Remove a low-order 2D polynomial surface from every frame
+   (:func:`poly_detrend`). This strips the large-scale structure of the
+   scene itself (temperature gradients, sea-ice edges, cloud edges).
+2. Sort the frames into bins of scene temperature (``BT_Center``) and take
+   the per-pixel median of the residuals in every bin
+   (:func:`build_correction_table`).
+3. Subtract the pattern, interpolated to the scene temperature of each
+   frame (:func:`apply_correction`).
 
-A held-out validation sweep (channel 3, gaussian high-pass at several
-scales vs. this polynomial detrend) found order=2 polynomial detrend gives
-the best generalization to unseen frames (16.3% median spatial-std
-reduction vs 12.8% for a gaussian sigma=40px baseline) -- it is the
-default here.
+The detrending in step 1 is essential: plain time averages of the frames
+keep real scene gradients, which then leak into the "correction". Two
+independently selected frame pools (clear-sky frames over sea ice, and
+marginal-ice-zone crossings) converge to the same pattern with this method
+(Pearson r = 0.74, channel 3). On held-out frames, a 2nd-order polynomial
+reduced the median spatial standard deviation by 16.3 %, more than a
+Gaussian high-pass (12.8 % for sigma = 40 px), and is the default.
+
+A table built from HALO-(AC)3 clear-sky frames over sea ice ships with the
+package (``velox_tools/data/correction_table_v1.nc``). It covers scene
+temperatures from -40 to -5 degC.
 """
 from __future__ import annotations
 
@@ -36,23 +35,22 @@ import xarray as xr
 
 
 def poly_detrend(block: np.ndarray, order: int = 2) -> np.ndarray:
-    """
-    Remove a low-order 2D polynomial surface from each frame independently.
+    """Remove a low-order 2D polynomial surface from each frame.
 
     Parameters
     ----------
-    block : np.ndarray, shape (n_frames, nx, ny)
-        Stack of 2D frames (e.g. BT_2D for one band, many timesteps).
-    order : int
-        Polynomial order (2 = quadratic surface). Validated as the
-        best-performing detrend against gaussian high-pass at sigma=8/15/40.
+    block : numpy.ndarray
+        Stack of frames, shape (n_frames, nx, ny), e.g. ``BT_2D`` of one
+        band.
+    order : int, default 2
+        Polynomial order (2 = quadratic surface).
 
     Returns
     -------
-    np.ndarray, float32, same shape as `block`: per-frame residual after
-    subtracting the fitted surface. NaNs in the input are preserved in the
-    output (excluded from the fit, filled with the frame's median for
-    fitting purposes only).
+    numpy.ndarray of float32
+        Same shape as `block`: the residual of every frame after subtracting
+        its fitted surface. NaNs stay NaN (for the fit they are filled with
+        the median of the frame).
     """
     if block.ndim != 3:
         raise ValueError(f"poly_detrend expects (n_frames, nx, ny), got shape {block.shape}")
@@ -106,46 +104,39 @@ def build_correction_table(
     order: int = 2,
     seed: int = 42,
 ) -> xr.Dataset:
-    """
-    Build a per-band, per-scene-temperature-bin fixed-pattern correction table.
+    """Build a fixed-pattern correction table per band and scene temperature.
 
     Parameters
     ----------
-    ds : xr.Dataset
-        Needs `BT_2D` (dims: band, time, x, y) and `BT_Center` (band, time)
-        -- the per-frame scene-mean brightness temperature, used to sort
-        frames into bins. Use a large, varied frame pool: a handful of
-        hand-picked scenes is not enough for the median-combine to average
-        out real scene structure. Validated with a clear-sky-flagged
-        multi-flight archive (~150-3000 frames/bin) and independently with
-        ~300-6500 MIZ-crossing frames/day; both converged to the same
-        pattern once detrended.
+    ds : xarray.Dataset
+        ``BT_2D`` (band, time, x, y) and ``BT_Center`` (band, time), the
+        scene temperature used to sort the frames into bins. Use a large,
+        varied pool of frames -- a handful of scenes is not enough for the
+        median to average out real scene structure. The shipped table used
+        up to 800 frames per bin.
     bands : list of int, optional
-        Band indices to process (default: all bands present in `ds`).
-    bin_width : float
-        Width of scene-BT bins, same units as BT_Center (typically °C).
-    min_frames_per_bin : int
-        Skip bins with fewer candidate frames than this.
+        Positional indices of the bands to process (default: all).
+    bin_width : float, default 5.0
+        Width of the scene-temperature bins, in the units of ``BT_Center``.
+    min_frames_per_bin : int, default 30
+        Skip bins with fewer frames.
     max_frames_per_bin : int, optional
-        Cap bins with more candidates than this (random subsample). None =
-        use every candidate frame (validated: patterns converge by ~150
-        frames/bin and don't change further with more, so capping around
-        there is a reasonable speed/robustness tradeoff if needed).
-    order : int
-        Polynomial detrend order, see `poly_detrend`. Default 2 (validated
-        best).
-    seed : int
-        RNG seed for max_frames_per_bin subsampling (reproducibility).
+        Randomly subsample bins with more frames. None uses all of them.
+        The pattern converges at about 150 frames per bin, so a cap of a
+        few hundred saves time without changing the result.
+    order : int, default 2
+        Polynomial order of the detrending, see :func:`poly_detrend`.
+    seed : int, default 42
+        Seed for the subsampling.
 
     Returns
     -------
-    xr.Dataset with:
-      - `pattern(band, Tbin, x, y)`: the correction map, subtract this from
-        BT_2D to correct it (see `apply_correction`).
-      - `n_frames(band, Tbin)`: how many frames went into each bin (NaN
-        where a band has no data at that Tbin -- bin edges are computed
-        per-band from that band's own BT_Center distribution, so bands
-        won't all share the exact same Tbin grid).
+    xarray.Dataset
+        ``pattern`` (band, Tbin, x, y): the pattern to subtract from
+        ``BT_2D`` (see :func:`apply_correction`). ``n_frames`` (band, Tbin):
+        the number of frames per bin. The bin edges follow the temperature
+        distribution of each band, so a band can be NaN at some ``Tbin``.
+        The ``band`` coordinate holds the positional band indices.
     """
     if bands is None:
         bands = list(range(ds.sizes['band']))
@@ -228,29 +219,32 @@ def apply_correction(
     correction_table: xr.Dataset,
     band: int,
 ) -> xr.DataArray:
-    """
-    Subtract the fixed-pattern correction from a BT_2D array.
+    """Subtract the fixed pattern from ``BT_2D`` of one band.
 
     Parameters
     ----------
-    bt_2d : xr.DataArray
-        (time, x, y) or (x, y) for a single band/frame.
-    scene_bt : xr.DataArray or float
-        Scene-mean brightness temperature for the same frame(s) as `bt_2d`
-        (typically that band's BT_Center) -- used to pick/interpolate the
-        right temperature bin from `correction_table`.
-    correction_table : xr.Dataset
-        Output of `build_correction_table`.
+    bt_2d : xarray.DataArray
+        One band, dims (time, x, y) or (x, y).
+    scene_bt : xarray.DataArray or float
+        Scene temperature of the same frame(s), typically ``BT_Center`` of
+        that band. The pattern is interpolated linearly between the
+        temperature bins of `correction_table`.
+    correction_table : xarray.Dataset
+        Output of :func:`build_correction_table`.
     band : int
-        Which band's pattern to apply.
+        Band of `correction_table` to use. For the shipped table, bands
+        0-4 are channels 1, 2, 3, 5 and 6.
 
     Returns
     -------
-    xr.DataArray, same shape as `bt_2d`, with the temperature-interpolated
-    pattern subtracted. Values outside the table's Tbin range are
-    extrapolated from the nearest bins (a warning-free clip is not applied
-    -- treat correction near the extremes of your data's temperature range
-    with appropriate caution).
+    xarray.DataArray
+        `bt_2d` with the pattern subtracted.
+
+    Notes
+    -----
+    Outside the temperature range of the table, the pattern is
+    extrapolated linearly from the outermost bins, without a warning.
+    Check that your scenes lie within the table's ``Tbin`` range.
     """
     pattern = correction_table['pattern'].sel(band=band)
     pattern = pattern.dropna(dim='Tbin', how='all')

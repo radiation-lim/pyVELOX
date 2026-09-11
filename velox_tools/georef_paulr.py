@@ -1,29 +1,25 @@
 # velox_tools/georef_paulr.py
-"""
-Per-pixel VELOX georeferencing using the `mounttree` coordinate-transform
-library.
+"""Per-pixel georeferencing of VELOX frames with calibrated view directions.
 
-Ported from Paul R.'s Velox_GeoRef_EachPx.py
-(/projekt_agmwend/home_rad/PaulR/Velox_GeoRef_Px/), which is not itself
-part of this package. This is offered as a second, more precise option
-alongside `velox_tools.processing.project`:
+The more precise of the two georeferencing options (the other is
+:func:`velox_tools.processing.project`):
 
-- `project()` uses one shared analytic pinhole/FOV model (35.5x28.7 deg)
-  for every channel.
-- `georef_frame`/`georef_series` (this module) use a per-pixel
-  View-Direction-Cosine calibration (`Velox-VDC.nc`) plus a per-channel
-  boresight offset angle from the VELOX_Stereography calibration -- each
-  of the 5 channels points in a very slightly different direction
-  (offset_roll/pitch/yaw differ by up to ~0.5 deg between channels), which
-  `project()` does not account for. It also iterates on a height plane
-  instead of assuming flat ground at height 0.
+- Every pixel has its own calibrated view direction (view-direction
+  cosines, one calibration file per channel, shipped with the package).
+- Every channel has its own boresight offset angles -- the five channels
+  point in slightly different directions (up to ~0.5 deg apart), with
+  separate calibrations for HALO-(AC)3 and PERCUSION.
+- The view directions are intersected iteratively with a plane at a given
+  height above the WGS84 ellipsoid.
 
-Requires the `mounttree` package: pip install mounttree
+The coordinate transformations use the `mounttree
+<https://pypi.org/project/mounttree/>`_ package. Ported from the per-pixel
+georeferencing script ``Velox_GeoRef_EachPx.py`` by Paul R.
 """
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import xarray as xr
@@ -41,6 +37,11 @@ else:
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data', 'georef_paulr')
 _CONFIG_PATH = os.path.join(_DATA_DIR, 'velox_mounttree.yaml')
 
+#: Offset (x0, y0) of each channel's 635 x 507 window of the final data on
+#: the 640 x 512 sensor (channel footprint alignment of the L1 processing,
+#: the same for HALO-(AC)3 and PERCUSION).
+FOOTPRINT = {1: (1, 3), 2: (1, 3), 3: (5, 1), 5: (0, 0), 6: (4, 5)}
+
 
 def _require_mounttree():
     if mnt is None:
@@ -55,7 +56,23 @@ def _load_config() -> dict:
 
 
 def available_channels(campaign: str = 'HALO-AC3') -> list[str]:
-    """List channels with calibration data for a given campaign."""
+    """Channels with a boresight calibration for a campaign.
+
+    Parameters
+    ----------
+    campaign : {'HALO-AC3', 'PERCUSION'}
+        Campaign name.
+
+    Returns
+    -------
+    list of str
+        E.g. ``['Channel1', 'Channel2', 'Channel3', 'Channel5', 'Channel6']``.
+
+    Raises
+    ------
+    ValueError
+        If there is no calibration for `campaign`.
+    """
     config = _load_config()
     try:
         return sorted(config['campaign'][campaign].keys())
@@ -94,7 +111,7 @@ class _ChannelGeometry:
     y_pixel: np.ndarray
 
 
-def _load_channel_geometry(channel: int, campaign: str) -> _ChannelGeometry:
+def _load_channel_geometry(channel: int, campaign: str, footprint: bool = False) -> _ChannelGeometry:
     _require_mounttree()
     offset_angles, vdc_path = _channel_calibration(channel, campaign)
 
@@ -108,6 +125,14 @@ def _load_channel_geometry(channel: int, campaign: str) -> _ChannelGeometry:
     ))
     x_pixel, y_pixel = vdc['x-pixel'].values, vdc['y-pixel'].values
     vdc.close()
+
+    if footprint:
+        # the VDC grid is rotated 180 deg against the final images (VDC: y=0
+        # forward, x=0 port; images: flight towards +y, x=0 starboard) --
+        # checked 2026-09-11 by frame-to-frame overlap in turns, both campaigns
+        x0, y0 = FOOTPRINT[channel]
+        vd_vector = vd_vector[:, ::-1, ::-1][:, x0:x0 + 635, y0:y0 + 507]
+        x_pixel, y_pixel = np.arange(635), np.arange(507)
 
     coord_sys = mnt.load_mounttree(_CONFIG_PATH)
     return _ChannelGeometry(coord_sys, offset_angles, vd_vector, x_pixel, y_pixel)
@@ -188,34 +213,43 @@ def georef_frame(
     roll: float, pitch: float, yaw: float,
     channel: int, campaign: str = 'HALO-AC3',
     ref_height: float = 0.0, max_height_err: float = 0.001,
-    flat_earth: bool = False,
+    flat_earth: bool = False, footprint: bool = False,
 ) -> xr.Dataset:
-    """
-    Georeference a single VELOX frame (one timestep, one channel) to lat/lon/height.
+    """Georeference a single frame of one channel.
 
-    For georeferencing many frames from the same channel, use
-    `georef_series` instead -- it loads the VDC calibration and builds the
-    coordinate tree once and reuses it, rather than repeating that (slow,
-    disk-bound) setup for every call the way calling this in a loop would.
+    To georeference many frames, use :func:`georef_series`: it loads the
+    calibration once instead of on every call.
 
     Parameters
     ----------
-    lat, lon, height : aircraft position (deg, deg, m above WGS84)
-    roll, pitch, yaw : aircraft attitude (deg)
-    channel : VELOX channel number (1, 2, 3, 5, or 6 for HALO-AC3)
-    campaign : which campaign's boresight calibration to use
-    ref_height : height (m above WGS84) of the plane pixels are projected
-        onto -- 0 for sea level, or a DEM value for known terrain height
-    max_height_err : convergence tolerance (m) for the height-plane
-        intersection iteration
-    flat_earth : if True, skip the iteration (single flat-earth pass)
+    lat, lon : float
+        Aircraft position (deg).
+    height : float
+        Aircraft altitude (m above WGS84).
+    roll, pitch, yaw : float
+        Aircraft attitude (deg); yaw is the true heading.
+    channel : int
+        Channel number (1, 2, 3, 5 or 6).
+    campaign : {'HALO-AC3', 'PERCUSION'}, default 'HALO-AC3'
+        Campaign whose boresight calibration to use.
+    ref_height : float, default 0.0
+        Height (m above WGS84) of the plane the pixels are projected onto:
+        0 for sea level, or a terrain height.
+    max_height_err : float, default 0.001
+        Convergence tolerance (m) of the height-plane intersection.
+    flat_earth : bool, default False
+        If True, stop after the first iteration.
+    footprint : bool, default False
+        If True, return the 635 x 507 grid of the final ``BT_2D`` images
+        (same pixel order). Otherwise the 640 x 512 grid of the calibration
+        file.
 
     Returns
     -------
-    xr.Dataset with `lat`, `lon`, `height` per (x-pixel, y-pixel), matching
-    the dims of that channel's VDC calibration file.
+    xarray.Dataset
+        ``lat``, ``lon`` and ``height`` per (x-pixel, y-pixel).
     """
-    geom = _load_channel_geometry(channel, campaign)
+    geom = _load_channel_geometry(channel, campaign, footprint)
     result = _georef_from_geometry(
         geom, lat=lat, lon=lon, height=height, roll=roll, pitch=pitch, yaw=yaw,
         ref_height=ref_height, max_height_err=max_height_err, flat_earth=flat_earth,
@@ -228,35 +262,39 @@ def georef_frame(
 def georef_series(
     nav: xr.Dataset, channel: int, campaign: str = 'HALO-AC3',
     ref_height: float = 0.0, max_height_err: float = 0.001, flat_earth: bool = False,
+    footprint: bool = False, rows=None,
 ) -> xr.Dataset:
-    """
-    Georeference a time series of VELOX frames using aircraft nav data.
+    """Georeference a series of frames of one channel.
 
     Parameters
     ----------
-    nav : xr.Dataset indexed by `time`, with `lat`, `lon`, `alt`, `roll`,
-        `pitch`, and a heading/yaw variable named `yaw`, `heading`, or
-        `hdg` (HALO_nav.nc/BAHAMAS convention) -- same dataset already
-        used by `velox_tools.processing.pushbroom`/`project`.
-    channel : VELOX channel number
-    campaign : calibration campaign (default 'HALO-AC3')
-    ref_height, max_height_err, flat_earth : see `georef_frame`
+    nav : xarray.Dataset
+        Navigation data at the frame times, indexed by ``time``, with
+        ``lat``, ``lon``, ``alt``, ``roll``, ``pitch`` and a heading named
+        ``yaw``, ``heading`` or ``hdg``. Every time step is one frame.
+    channel : int
+        Channel number (1, 2, 3, 5 or 6).
+    campaign : {'HALO-AC3', 'PERCUSION'}, default 'HALO-AC3'
+        Campaign whose boresight calibration to use.
+    ref_height, max_height_err, flat_earth, footprint
+        See :func:`georef_frame`.
+    rows : array-like of int or slice, optional
+        Only georeference these rows (y), e.g. the strip that goes into a
+        pushbroom image.
 
     Returns
     -------
-    xr.Dataset with lat/lon/height per (time, x-pixel, y-pixel).
+    xarray.Dataset
+        ``lat``, ``lon`` and ``height`` per (time, x-pixel, y-pixel).
 
-    Note
-    ----
-    The VDC calibration and coordinate tree are loaded once (not once per
-    frame), but the per-frame height-plane intersection itself still runs
-    in a plain Python loop over `nav.time` -- each frame typically takes
-    well under a second once geometry is cached, but for a full flight day
-    consider subsetting `nav` first or parallelizing externally (e.g.
-    dask.delayed over chunks of time).
+    Notes
+    -----
+    The frames are processed one after the other, typically in well under
+    a second each. For long series, subset `nav` or parallelise over
+    chunks of time.
     """
     _require_mounttree()
-    yaw_candidates = ('yaw', 'heading', 'hdg')  # BAHAMAS/HALO_nav.nc uses 'hdg'
+    yaw_candidates = ('yaw', 'heading', 'hdg')  # campaign.load_nav uses 'hdg'
     yaw_var = next((v for v in yaw_candidates if v in nav), None)
     if yaw_var is None:
         raise ValueError(
@@ -264,7 +302,9 @@ def georef_series(
             f"variable under one of those names. Available: {list(nav.data_vars)}"
         )
 
-    geom = _load_channel_geometry(channel, campaign)
+    geom = _load_channel_geometry(channel, campaign, footprint)
+    if rows is not None:
+        geom = replace(geom, vd_vector_velox=geom.vd_vector_velox[:, :, rows], y_pixel=geom.y_pixel[rows])
 
     frames = []
     times = []

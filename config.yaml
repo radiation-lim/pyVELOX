@@ -1,3 +1,7 @@
-# config.yaml
-xr_HALO: "/projekt_agmwend/home_rad/Joshua/HALO-AC3_unified_data/unified_gps_new.nc"
-velox_data: "path/to/your/velox_data.nc"
+# pyVELOX configuration -- found in the working directory or any parent directory.
+#
+# data_root: directory holding the HALO-AC3/ and PERCUSION/ campaign archives.
+# Found automatically on the server (/projekt_agmwend/data) and on Windows with
+# /projekt_agmwend mounted as P:. Set it only for other mounts:
+#
+# data_root: Q:/data

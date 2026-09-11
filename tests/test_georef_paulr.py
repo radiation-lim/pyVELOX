@@ -9,6 +9,22 @@ def test_available_channels_halo_ac3():
     assert channels == ['Channel1', 'Channel2', 'Channel3', 'Channel5', 'Channel6']
 
 
+def test_available_channels_percusion():
+    assert available_channels('PERCUSION') == ['Channel1', 'Channel2', 'Channel3', 'Channel5', 'Channel6']
+
+
+def test_footprint_matches_final_image_grid():
+    """Final-product images fly towards +y with x=0 on starboard, the VDC
+    grid is rotated 180 deg against that (checked 2026-09-11 by
+    frame-to-frame overlap in turns, HALO-AC3 RF07 and PERCUSION RF07).
+    Heading east: +y must point east, x=0 south."""
+    frame = georef_frame(lat=78.67, lon=-14.33, height=11731.0, roll=0.0, pitch=0.0, yaw=90.0,
+                         channel=3, flat_earth=True, footprint=True)
+    assert frame['lat'].shape == (635, 507)
+    assert frame['lon'][317, -1] > frame['lon'][317, 0]
+    assert frame['lat'][0, 253] < frame['lat'][-1, 253]
+
+
 def test_unknown_campaign_raises():
     with pytest.raises(ValueError):
         available_channels('NOT-A-REAL-CAMPAIGN')

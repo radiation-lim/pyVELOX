@@ -6,35 +6,50 @@ sys.path.insert(0, os.path.abspath('..'))
 
 project = 'pyVELOX'
 author = 'Joshua Müller'
-copyright = '2026, Joshua Müller'
+copyright = '2026, Leipzig Institute for Meteorology'
 
 extensions = [
-    'autodoc2',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
+    'sphinx.ext.napoleon',
+    'sphinx.ext.intersphinx',
+    'sphinx.ext.viewcode',
     'myst_nb',
 ]
 
-autodoc2_packages = [
-    {'path': '../velox_tools', 'exclude_dirs': ['notebooks', '__pycache__', 'data']},
-]
-autodoc2_render_plugin = 'myst'
-autodoc2_index_template = None
-
-myst_enable_extensions = ['colon_fence', 'deflist']
-
-# myst-nb: execute notebooks at build time so examples stay honest, but
-# don't fail the whole build if one needs data/paths only available on
-# the cluster this package is developed on
-nb_execution_mode = 'off'
-
 root_doc = 'index'
+exclude_patterns = [
+    '_build', 'Thumbs.db', '.DS_Store', '.jupyter_cache',
+    # only the numbered example notebooks belong in the docs
+    'notebooks/[!0-9]*.ipynb', 'notebooks/*-checkpoint.ipynb',
+]
+
+# API reference: numpy-style docstrings, members in source order
+autodoc_member_order = 'bysource'
+autodoc_typehints = 'description'
+autodoc_default_options = {'members': True, 'undoc-members': True}
+napoleon_google_docstring = False
+napoleon_use_rtype = False
+autosummary_generate = False
+
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/3', None),
+    'numpy': ('https://numpy.org/doc/stable', None),
+    'xarray': ('https://docs.xarray.dev/en/stable', None),
+    'dask': ('https://docs.dask.org/en/stable', None),
+    'distributed': ('https://distributed.dask.org/en/stable', None),
+}
+
+# notebooks are rendered with the outputs stored in them -- executing them
+# needs the campaign archive
+nb_execution_mode = 'off'
+myst_enable_extensions = ['colon_fence', 'deflist']
 
 html_theme = 'sphinx_book_theme'
 html_title = 'pyVELOX'
-exclude_patterns = [
-    '_build', 'Thumbs.db', '.DS_Store',
-    # only the two example notebooks are referenced from the toctree;
-    # exclude the rest of velox_tools/notebooks/ (dev notebooks, not docs)
-    'notebooks/pushbroom.ipynb', 'notebooks/georeff.ipynb',
-    'notebooks/correct_fixed_pattern.ipynb', 'notebooks/correct_fixed_pattern2.ipynb',
-    'notebooks/*-checkpoint.ipynb',
-]
+html_logo = '../logo.png'
+html_theme_options = {
+    'repository_url': 'https://github.com/radiation-lim/pyVELOX',
+    'use_repository_button': True,
+    'show_toc_level': 2,
+}

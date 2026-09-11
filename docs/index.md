@@ -1,42 +1,53 @@
 # pyVELOX
 
-Tools for processing thermal imagery from the VELOX airborne thermal
-imager: reading, pushbroom compositing, georeferencing, and correcting the
-temperature-dependent fixed-pattern noise that survives the onboard NUC.
+Python tools for VELOX, the airborne thermal infrared imager of the Leipzig
+Institute for Meteorology on the research aircraft HALO. The package loads the
+final brightness-temperature data of the HALO-(AC)3 and PERCUSION campaigns,
+builds pushbroom images, georeferences every pixel and corrects the fixed-pattern
+noise of the camera.
+
+## Installation
+
+```bash
+git clone https://github.com/radiation-lim/pyVELOX.git
+cd pyVELOX
+pip install .
+```
+
+## Quickstart
+
+```python
+from velox_tools import campaign
+
+# brightness temperatures of all channels: BT_2D (band, time, x, y) in degC
+ds = campaign.load_velox(slice('2024-08-25T12:30:00', '2024-08-25T12:30:09'))
+
+# pushbroom image of a flight segment, with latitude/longitude per pixel
+pb = campaign.pushbroom(slice('2024-08-25T12:24', '2024-08-25T12:36'), georef=True)
+
+# per-pixel georeferencing of full frames of one channel
+geo = campaign.georef(slice('2024-08-25T12:30:00', '2024-08-25T12:30:09'), channel=3)
+```
+
+The VELOX and BAHAMAS data are read from the campaign archive on the server
+(see {doc}`notebooks/01_loading_data`); the calibration files ship with the
+package. The building blocks in `processing`, `georef_paulr` and `correction`
+take xarray datasets.
 
 ```{toctree}
 :maxdepth: 1
 :caption: Examples
 
-notebooks/correction_example.ipynb
-notebooks/georef_paulr_example.ipynb
+notebooks/01_loading_data.ipynb
+notebooks/02_pushbroom_images.ipynb
+notebooks/03_georeferencing.ipynb
+notebooks/04_fixed_pattern_correction.ipynb
+notebooks/05_geometry_and_utilities.ipynb
 ```
 
 ```{toctree}
 :maxdepth: 2
-:caption: API Reference
+:caption: API reference
 
-apidocs/velox_tools/velox_tools
+api/index
 ```
-
-## Quick start
-
-```python
-from velox_tools.correction import build_correction_table, apply_correction
-
-# ds needs BT_2D (band, time, x, y) and BT_Center (band, time)
-table = build_correction_table(ds, bin_width=5.0, max_frames_per_bin=800)
-corrected = apply_correction(ds['BT_2D'].isel(band=2), ds['BT_Center'].isel(band=2), table, band=2)
-```
-
-```python
-from velox_tools.georef_paulr import georef_series
-import xarray as xr
-
-nav = xr.open_dataset('velox_tools/data/HALO_nav.nc').sortby('time')
-segment = nav.sel(time=slice('2022-03-20T10:51:00', '2022-03-20T10:51:10'))
-result = georef_series(segment, channel=3)  # lat/lon/height per (time, x-pixel, y-pixel)
-```
-
-See the example notebooks above for full walkthroughs, and the API
-reference for every function's parameters.
