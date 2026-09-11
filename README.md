@@ -27,7 +27,7 @@ package. No further downloads are needed.
 
 ## Quickstart
 
-A time is all it takes -- campaign and research flight follow from the date:
+A time is all it takes! Campaign and research flight follow from the date:
 
 ```python
 from velox_tools import campaign
