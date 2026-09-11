@@ -25,7 +25,6 @@ def _default_nav_data(time):
     return campaign.load_nav(time)
 
 
-@timing_wrapper
 def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=None,
               invert_y=False, time_correction: bool = True):
     """Build a pushbroom image from a sequence of VELOX frames.
@@ -75,7 +74,6 @@ def pushbroom(dataset, slicing_position=250, quality_flag=None, nav_data=None,
 
     Notes
     -----
-    The runtime is printed after every call.
     """
     dataset_time = dataset.time
     if nav_data is None:
