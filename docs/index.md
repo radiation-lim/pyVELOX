@@ -25,6 +25,7 @@ notebooks/02_pushbroom_images.ipynb
 notebooks/03_georeferencing.ipynb
 notebooks/04_fixed_pattern_correction.ipynb
 notebooks/05_geometry_and_utilities.ipynb
+notebooks/06_shoreline_validation.ipynb
 ```
 
 ```{include} ../README.md

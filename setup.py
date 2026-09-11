@@ -26,6 +26,10 @@ setup(
         "scipy",
         "mounttree",  # required by velox_tools.georef_paulr
     ],
+    extras_require={
+        # velox_tools.shoreline and notebooks/shoreline_calibration.ipynb
+        "shoreline": ["shapely>=2", "pyproj", "fiona", "rasterio", "ipympl", "ipywidgets"],
+    },
     package_data={
         "velox_tools": [
             "notebooks/[0-9]*.ipynb",

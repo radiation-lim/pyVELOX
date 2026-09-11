@@ -9,6 +9,7 @@ Every public function of the package, by module.
 campaign
 processing
 georef_paulr
+shoreline
 correction
 geometry
 io
@@ -48,6 +49,34 @@ utils
    georef_paulr.available_channels
    georef_paulr.georef_frame
    georef_paulr.georef_series
+
+:doc:`shoreline` -- validating and calibrating the georeferencing with shorelines
+
+.. autosummary::
+
+   shoreline.default_cache
+   shoreline.osm_coastline
+   shoreline.read_shoreline
+   shoreline.geoid_height
+   shoreline.flights
+   shoreline.frame_times
+   shoreline.find_events
+   shoreline.find_all_events
+   shoreline.read_events
+   shoreline.cache_frames
+   shoreline.add_frames
+   shoreline.load_event
+   shoreline.suggest_edges
+   shoreline.LabelStore
+   shoreline.progress
+   shoreline.Frame
+   shoreline.georef_corrected
+   shoreline.frames_from_labels
+   shoreline.FitResult
+   shoreline.fit
+   shoreline.jackknife
+   shoreline.body_frame_residuals
+   shoreline.body_frame_shift
 
 :doc:`correction` -- fixed-pattern correction
 

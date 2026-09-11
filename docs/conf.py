@@ -30,6 +30,7 @@ autodoc_typehints = 'description'
 autodoc_default_options = {'members': True, 'undoc-members': True}
 napoleon_google_docstring = False
 napoleon_use_rtype = False
+napoleon_use_ivar = True  # 'Attributes' as fields: dataclass members are not documented twice
 autosummary_generate = False
 
 intersphinx_mapping = {

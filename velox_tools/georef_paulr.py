@@ -37,10 +37,15 @@ else:
 _DATA_DIR = os.path.join(os.path.dirname(__file__), 'data', 'georef_paulr')
 _CONFIG_PATH = os.path.join(_DATA_DIR, 'velox_mounttree.yaml')
 
-#: Offset (x0, y0) of each channel's 635 x 507 window of the final data on
-#: the 640 x 512 sensor (channel footprint alignment of the L1 processing,
-#: the same for HALO-(AC)3 and PERCUSION).
-FOOTPRINT = {1: (1, 3), 2: (1, 3), 3: (5, 1), 5: (0, 0), 6: (4, 5)}
+#: Offset (x0, y0) of the 635 x 507 window of the final data on the 640 x 512
+#: calibration grid, after its 180 deg rotation. The same for all channels:
+#: the boresight offsets of every channel were fitted with the ground control
+#: points of one channel-aligned final image (channel 1, trimmed
+#: [bow, starboard, stern, port] = [2, 1, 3, 4] px; Rothenberg's
+#: ``OffsetAngles.py`` and Silver thesis), so they already absorb the channel
+#: alignment of the L1 processing. Channel-specific windows (e.g. (5, 1) for
+#: channel 3) would apply it twice -- 4-5 px, 50-60 m at 12 km altitude.
+FOOTPRINT = {channel: (1, 3) for channel in (1, 2, 3, 5, 6)}
 
 
 def _require_mounttree():

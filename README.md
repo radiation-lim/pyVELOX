@@ -22,6 +22,8 @@ cd pyVELOX
 pip install .
 ```
 
+For the shoreline calibration tool, install the extras with `pip install ".[shoreline]"`.
+
 The VELOX and BAHAMAS data are read from the campaign archive on the server
 (see [Configuration](#configuration)); the calibration files ship with the
 package. No further downloads are needed.
@@ -76,9 +78,15 @@ each part of the package with real data:
 |---|---|
 | [1. Loading data](velox_tools/notebooks/01_loading_data.ipynb) | configuration, research flights, brightness temperatures, navigation data |
 | [2. Pushbroom images](velox_tools/notebooks/02_pushbroom_images.ipynb) | strip width, pushbroom images, ground-time axis, georeferenced pushbroom images |
-| [3. Georeferencing](velox_tools/notebooks/03_georeferencing.ipynb) | single frames and series, channel offsets, comparison of both methods, cloud-top height |
+| [3. Georeferencing](velox_tools/notebooks/03_georeferencing.ipynb) | single frames and series, channel offsets, comparison of both methods, cloud-top height, coastal validation |
 | [4. Fixed-pattern correction](velox_tools/notebooks/04_fixed_pattern_correction.ipynb) | the shipped correction table, applying it, building your own |
 | [5. Geometry and utilities](velox_tools/notebooks/05_geometry_and_utilities.ipynb) | footprint, nadir pixel, viewing angles, housekeeping temperatures, dask cluster |
+| [6. Shoreline validation](velox_tools/notebooks/06_shoreline_validation.ipynb) | accuracy of the georeferencing at labelled coastlines, along- and across-track misses, roll correction of HALO-(AC)3, before and after |
+
+[`shoreline_calibration.ipynb`](velox_tools/notebooks/shoreline_calibration.ipynb) is the interactive tool
+behind notebook 6 (needs `ipympl`): it finds the coastline passages of all
+flights, lets you rate and label the shoreline in their frames, and fits
+boresight and timing corrections of the georeferencing to the labels.
 
 <!-- docs:reference-start -->
 ## Package overview
@@ -88,6 +96,7 @@ each part of the package with real data:
 | `velox_tools.campaign` | load VELOX and BAHAMAS data of HALO-(AC)3 and PERCUSION by time; one-call pushbroom and georeferencing |
 | `velox_tools.processing` | pushbroom images and the analytic georeferencing `project` |
 | `velox_tools.georef_paulr` | per-pixel georeferencing with calibrated view directions and per-channel boresight offsets |
+| `velox_tools.shoreline` | validate and calibrate the georeferencing with labelled shorelines |
 | `velox_tools.correction` | build and apply the fixed-pattern correction |
 | `velox_tools.geometry` | viewing zenith angles of an ideal pinhole camera |
 | `velox_tools.io` | lens and window temperature logs |
